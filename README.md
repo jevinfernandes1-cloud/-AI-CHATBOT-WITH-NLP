@@ -1,1 +1,17 @@
-# -AI-CHATBOT-WITH-NLP
+# AI-CHATBOT-WITH-NLP
+
+*COMPANY*: CODTECH IT SOLUTIONS
+
+*NAME*: JEVIN PAWAN FERNANDES
+
+*INTERN ID*: CT04DZ1493
+
+*DOMAIN*: PYTHON PROGRAMMING
+
+*DURATION*: 4 WEEKS
+
+*MENTOR*: NEELA SANTHOSH
+
+#OUTPUT
+
+<img width="788" height="317" alt="Output task3" src="https://github.com/user-attachments/assets/00c3c76b-b7a2-41c7-8363-052482b3901d" />
