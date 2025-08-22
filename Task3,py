@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""
+NLP Chatbot (NLTK + scikit-learn)
+---------------------------------
+- Uses regex & NLTK (if available) for tokenization.
+- Uses scikit-learn TF-IDF + cosine similarity for FAQ retrieval.
+- Simple regex intents for small talk.
+
+Run:
+    python nlp_chatbot.py
+    python nlp_chatbot.py --faq faq_sample.json
+
+Type 'exit' or 'quit' to stop.
+"""
+
+import argparse
+import json
+import re
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+# --- Optional NLTK tokenizer ---
+try:
+    import nltk
+    from nltk.tokenize import word_tokenize
+    _USE_NLTK = True
+except Exception:
+    _USE_NLTK = False
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+def regex_tokenize(text: str) -> List[str]:
+    return re.findall(r"[A-Za-z0-9']+", text.lower())
+
+def tokenize(text: str) -> List[str]:
+    if _USE_NLTK:
+        try:
+            return [t.lower() for t in word_tokenize(text)]
+        except Exception:
+            return regex_tokenize(text)
+    return regex_tokenize(text)
+
+def normalize_text(s: str) -> str:
+    return " ".join(tokenize(s))
+
+@dataclass
+class QAItem:
+    question: str
+    answer: str
+
+class NLPChatbot:
+    def __init__(self, faq_items: Optional[List[QAItem]] = None, similarity_threshold: float = 0.35):
+        self.faq_items = faq_items or self._default_faq()
+        self.vectorizer = TfidfVectorizer(
+            preprocessor=normalize_text,
+            tokenizer=lambda x: x.split(),
+            ngram_range=(1,2),
+            min_df=1,
+            max_df=1.0
+        )
+        self.similarity_threshold = similarity_threshold
+        self._fit_retriever()
+
+        self._intent_patterns = {
+            "GREET": re.compile(r"\b(hi|hello|hey|yo|hola|howdy|good (morning|afternoon|evening))\b", re.I),
+            "BYE": re.compile(r"\b(bye|goodbye|see you|ciao)\b", re.I),
+            "THANKS": re.compile(r"\b(thanks|thank you|thx|ty)\b", re.I),
+            "ASK_NAME": re.compile(r"\b(who are you|your name|ur name)\b", re.I),
+            "HELP": re.compile(r"\b(help|what can you do)\b", re.I),
+        }
+
+    def _default_faq(self) -> List[QAItem]:
+        return [
+            QAItem("what is nlp",
+                   "NLP (Natural Language Processing) is a field of AI focused on enabling computers to understand and generate human language."),
+            QAItem("what libraries do you use",
+                   "I use NLTK for tokenization and scikit-learn (TF-IDF + cosine similarity) for retrieval."),
+            QAItem("how do i add my own knowledge",
+                   "Provide a JSON file with a list of {'question':..., 'answer':...} and run with --faq path/to/file.json."),
+            QAItem("how to exit",
+                   "Type 'exit' or 'quit' to end the chat."),
+            QAItem("what is cosine similarity",
+                   "Cosine similarity measures how similar two vectors are, based on the cosine of the angle between them (1.0 is most similar)."),
+            QAItem("tell me about tf idf",
+                   "TF-IDF weighs terms by how frequent they are in a document and how rare they are across documents, helping highlight informative words."),
+        ]
+
+    def _fit_retriever(self):
+        questions = [q.question for q in self.faq_items]
+        self.tfidf_matrix = self.vectorizer.fit_transform(questions)
+
+    def _retrieve(self, text: str) -> Tuple[Optional[QAItem], float]:
+        if not text.strip():
+            return None, 0.0
+        q_vec = self.vectorizer.transform([text])
+        sims = cosine_similarity(q_vec, self.tfidf_matrix)[0]
+        if sims.size == 0:
+            return None, 0.0
+        idx = sims.argmax()
+        score = float(sims[idx])
+        if score >= self.similarity_threshold:
+            return self.faq_items[idx], score
+        return None, score
+
+    def _match_intent(self, text: str) -> Optional[str]:
+        for intent, pattern in self._intent_patterns.items():
+            if pattern.search(text):
+                if intent == "GREET":
+                    return "Hey there! How can I help today?"
+                if intent == "BYE":
+                    return "Goodbye! If you have more questions, come back anytime."
+                if intent == "THANKS":
+                    return "You're welcome!"
+                if intent == "ASK_NAME":
+                    return "I'm an NLP-powered assistant. You can call me Nova."
+                if intent == "HELP":
+                    return "I answer FAQs via semantic search. Ask me about NLP, TF-IDF, cosine similarity, or load your own FAQs with --faq."
+        return None
+
+    def respond(self, user_text: str) -> str:
+        intent = self._match_intent(user_text)
+        if intent:
+            return intent
+        item, score = self._retrieve(user_text)
+        if item:
+            return item.answer + f" (match={score:.2f})"
+        nt = normalize_text(user_text)
+        if any(k in nt for k in ["time","date"]):
+            return "I can't access system time here, but you can ask me about NLP concepts or load your own FAQ base."
+        if any(k in nt for k in ["joke","funny"]):
+            return "Why did the neural net cross the road? To get to the other 'side'—the feature side. 😄"
+        return "I'm not sure yet—but you can rephrase your question or add domain FAQs via --faq."
+
+def load_faq(path: Optional[str]) -> List[QAItem]:
+    if not path:
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    items = []
+    for row in data:
+        q = row.get("question","").strip()
+        a = row.get("answer","").strip()
+        if q and a:
+            items.append(QAItem(q, a))
+    return items
+
+def run_cli(args):
+    faq_items = load_faq(args.faq)
+    bot = NLPChatbot(faq_items=faq_items or None, similarity_threshold=args.threshold)
+    print("NLP Chatbot (NLTK + scikit-learn)")
+    if args.faq:
+        print(f"Loaded FAQ from: {args.faq} (items={len(faq_items)})")
+    else:
+        print("Using built-in sample FAQ.")
+    print("Type 'exit' or 'quit' to end.\n")
+
+    while True:
+        try:
+            user = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting. Bye!")
+            break
+        if user.lower() in {"exit","quit"}:
+            print("Bot: Goodbye! 👋")
+            break
+        reply = bot.respond(user)
+        print(f"Bot: {reply}")
+
+def main():
+    parser = argparse.ArgumentParser(description="Run a simple NLP chatbot (NLTK + TF-IDF retrieval).")
+    parser.add_argument("--faq", type=str, default=None, help="Path to FAQ JSON (list of {question, answer}).")
+    parser.add_argument("--threshold", type=float, default=0.35, help="Cosine similarity threshold for FAQ match.")
+    args = parser.parse_args()
+    run_cli(args)
+
+if __name__ == "__main__":
+    main()
