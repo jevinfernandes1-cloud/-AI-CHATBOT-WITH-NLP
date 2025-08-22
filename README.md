@@ -12,7 +12,7 @@
 
 *MENTOR*: NEELA SANTHOSH
 
-**AI Chatbot with NLP – Project Description
+**Project Description
 
 For this project, I wanted to explore the world of chatbots and see how we can build one using Natural Language Processing (NLP). Chatbots are everywhere today — from customer support on websites to personal assistants like Siri or Alexa. The idea behind my project was to build a simple AI chatbot that can understand user queries in text form and reply with meaningful answers.
 
